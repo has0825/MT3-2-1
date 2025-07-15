@@ -207,6 +207,18 @@ void DrawSphere(const Spheres& sphere, const Matrix4x4& viewProjectionMatrix, co
     }
 }
 
+// 衝突判定関数の追加
+bool IsColliding(const Spheres& a, const Spheres& b) {
+    Vector3 diff = {
+        a.center.x - b.center.x,
+        a.center.y - b.center.y,
+        a.center.z - b.center.z
+    };
+    float distanceSquared = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+    float radiusSum = a.radius + b.radius;
+    return distanceSquared <= radiusSum * radiusSum;
+}
+
 Vector3 cameraTranslate = { 0.0f, 2.0f, -7.0f };
 Vector3 cameraRotate = { 0.0f, 0.0f, 0.0f };
 // 球を2つ定義
@@ -220,14 +232,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     char keys[256] = { 0 };
     char preKeys[256] = { 0 };
 
-
     int mouseX = 0, mouseY = 0;
     int preMouseX = 0, preMouseY = 0;
     bool isRightDragging = false;
+
     while (Novice::ProcessMessage() == 0) {
 
         Novice::BeginFrame();
-
 
         // ImGui 操作パネル
         ImGui::Begin("Window");
@@ -240,11 +251,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         ImGui::End();
 
-
         memcpy(preKeys, keys, 256);
         Novice::GetHitKeyStateAll(keys);
-
-
 
         Matrix4x4 rotateMatrix = MakeRotateMatrix(cameraRotate);
         Vector3 forward = Transform({ 0, 0, 1 }, rotateMatrix);
@@ -254,10 +262,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             cameraTranslate.z + forward.z
         };
         Vector3 up = Transform({ 0, 1, 0 }, rotateMatrix);
-
         Matrix4x4 viewMatrix = MakeViewMatrix(cameraTranslate, target, up);
-
-
 
         preMouseX = mouseX;
         preMouseY = mouseY;
@@ -274,7 +279,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             isRightDragging = false;
         }
 
-
         if (keys[DIK_W]) cameraTranslate.z += 0.1f;
         if (keys[DIK_S]) cameraTranslate.z -= 0.1f;
         if (keys[DIK_A]) cameraTranslate.x -= 0.1f;
@@ -282,28 +286,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         if (keys[DIK_Q]) cameraTranslate.y += 0.1f;
         if (keys[DIK_E]) cameraTranslate.y -= 0.1f;
 
-
-
-
-        // パース付き射影行列
+        // 射影行列など
         float fovY = 0.5f;
         float aspect = 1280.0f / 720.0f;
         float nearZ = 0.1f;
         float farZ = 100.0f;
         Matrix4x4 projectionMatrix = MakePerspectiveMatrix(fovY, aspect, nearZ, farZ);
 
-        // viewProjectionMatrix = view × projection
-        Matrix4x4 viewProjectionMatrix = {};
-        for (int i = 0; i < 4; ++i) {
-            for (int j = 0; j < 4; ++j) {
-                viewProjectionMatrix.m[i][j] = 0.0f;
-                for (int k = 0; k < 4; ++k) {
-                    viewProjectionMatrix.m[i][j] += viewMatrix.m[i][k] * projectionMatrix.m[k][j];
-                }
-            }
-        }
+        Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 
-        // ビューポート行列（画面中心に変換）
         Matrix4x4 viewportMatrix = {
             640.0f, 0,       0, 0,
             0,    -360.0f,   0, 0,
@@ -311,30 +302,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             640.0f, 360.0f,  0, 1
         };
 
+        // ← ここで関数呼び出しに変更
+        bool isColliding = IsColliding(sphereA, sphereB);
 
-        // 2球間の当たり判定（距離比較）
-        Vector3 diff = {
-            sphereA.center.x - sphereB.center.x,
-            sphereA.center.y - sphereB.center.y,
-            sphereA.center.z - sphereB.center.z
-        };
-        float distanceSquared = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-        float radiusSum = sphereA.radius + sphereB.radius;
-        bool isColliding = distanceSquared <= radiusSum * radiusSum;
-
-        // 描画（Aが重なっているときだけ赤、それ以外は黒）
         DrawSphere(sphereA, viewProjectionMatrix, viewportMatrix, isColliding ? 0xFF0000FF : WHITE);
         DrawSphere(sphereB, viewProjectionMatrix, viewportMatrix, WHITE);
 
-
-
-
-        // 描画
+        // グリッド
         DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-
-
-        /// ↑描画処理ここまで
         Novice::EndFrame();
 
         if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
